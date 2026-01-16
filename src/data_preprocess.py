@@ -9,11 +9,14 @@ import numpy as np
 
 
 # Load data
-def load_country_data(country, indicator, features_dir, target_dir, dropna=True):
+def load_country_data(country, indicator, base_data_dir='data/raw'):
     """
     Load feature and target CSVs for a given country.
     Returns merged DataFrame with TIME_PERIOD index.
     """
+    features_dir = os.path.join(base_data_dir, indicator, 'Features')
+    target_dir = os.path.join(base_data_dir, indicator, 'Target')
+    
     data_dict = {}
     
     # Load features
@@ -129,3 +132,4 @@ def plot_corr_matrix(df, save_path=None, title='Correlation Matrix'):
     if save_path:
         plt.savefig(save_path, dpi=300)
     plt.show()
+
