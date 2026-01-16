@@ -97,6 +97,14 @@ def rolling_origin_poly_ridge(
             best_train_true = np.array(train_true)
 
     # Metrics
+    def mape(y_true, y_pred):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    non_zero_mask = y_true != 0
+    return np.mean(
+        np.abs((y_true[non_zero_mask] - y_pred[non_zero_mask]) / y_true[non_zero_mask])
+    ) * 100
+
+
     train_rmse = np.sqrt(mean_squared_error(best_train_true, best_train_fitted))
     train_mae = mean_absolute_error(best_train_true, best_train_fitted)
     train_mape = mape(best_train_true, best_train_fitted)
