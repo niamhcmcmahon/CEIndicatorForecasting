@@ -70,7 +70,7 @@ def rolling_origin_poly_lasso(
             model = Lasso(alpha=alpha, max_iter=10000, random_state=random_state)
             model.fit(X_train, y_train)
 
-            # In-sample fitted values
+            # store fitted values
             fitted_train = model.predict(X_train)
             train_fitted_preds.extend(fitted_train)
             train_true.extend(y_train)
@@ -127,3 +127,4 @@ def rolling_origin_poly_lasso(
     }
 
     return best_forecast_df, metrics
+
