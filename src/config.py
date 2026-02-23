@@ -1,5 +1,5 @@
 # Paths
-RAW_DATA_DIR = "/content/drive/MyDrive/CEIndicators"
+RAW_DATA_DIR = "data/raw/indicator/resourceproductivity"
 PROCESSED_DATA_DIR = f"{RAW_DATA_DIR}/Processed"
 FEATURES_DIR = f"{RAW_DATA_DIR}/Features"
 TARGET_DIR = f"{RAW_DATA_DIR}/Target"
