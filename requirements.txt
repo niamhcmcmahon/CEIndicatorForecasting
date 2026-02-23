@@ -6,3 +6,7 @@ scikit-learn
 xgboost
 statsmodels
 scipy
+
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+
