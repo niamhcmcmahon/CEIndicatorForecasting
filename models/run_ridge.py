@@ -9,7 +9,7 @@ from src.bootstrap import gaussian_bootstrap
 
 
 #Load data
-df = pd.read_csv(RAW_DATA_DIR / "your_dataset.csv")
+df = pd.read_csv(RAW_DATA_DIR / "resourceproductivity.csv")
 
 # Adjust if needed
 target_col = "ResourceProductivity"
