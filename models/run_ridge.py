@@ -41,4 +41,3 @@ print("MAPE:", mape(true_values, predictions))
 #CI
 lower, upper = gaussian_bootstrap(predictions, residuals)
 
-print("Bootstrap CI computed.")
