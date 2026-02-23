@@ -1,45 +1,46 @@
-import os
 import pandas as pd
-from src.config import COUNTRIES, FEATURES_DIR, TARGET_DIR
+import os
 
-def load_data(feature_files, target_file):
-    """
-    Load feature and target CSVs for countries specified in config.
-    Returns a dictionary {country: merged_dataframe}.
-    """
-    all_data = {}
+def load_country_data(indicator: str, countries: list):
+    base_dir = 'data/raw/indicator/resourceproductivity'
+    features_dir = os.path.join(base_dir, 'features')
+    target_dir = os.path.join(base_dir, 'target')
 
-    for country in COUNTRIES:
+    country_data_dict = {}
+
+    for country in countries:
         data_dict = {}
-
         # Load features
-        for filename in feature_files:
-            var_name = filename.replace('.csv', '')
-            filepath = os.path.join(FEATURES_DIR, filename)
-            df = pd.read_csv(filepath, usecols=['geo', 'TIME_PERIOD', 'OBS_VALUE'])
-            country_data = df[df['geo'] == country].copy()
-            country_data.rename(columns={'OBS_VALUE': var_name}, inplace=True)
-            data_dict[var_name] = country_data[['TIME_PERIOD', var_name]]
+        for f in os.listdir(features_dir):
+            if f.endswith('.csv'):
+                var_name = f.replace('.csv', '')
+                df = pd.read_csv(os.path.join(features_dir, f), usecols=['geo', 'TIME_PERIOD', 'OBS_VALUE'])
+                df = df[df['geo'] == country]
+                df.rename(columns={'OBS_VALUE': var_name}, inplace=True)
+                df['TIME_PERIOD'] = pd.to_datetime(df['TIME_PERIOD'], format='%Y', errors='coerce')
+                df.dropna(subset=['TIME_PERIOD'], inplace=True)
+                data_dict[var_name] = df[['TIME_PERIOD', var_name]]
 
         # Load target
-        target_name = target_file.replace('.csv', '')
-        target_filepath = os.path.join(TARGET_DIR, target_file)
-        target_df = pd.read_csv(target_filepath, usecols=['geo', 'TIME_PERIOD', 'OBS_VALUE'])
-        target_data = target_df[target_df['geo'] == country].copy()
-        target_data.rename(columns={'OBS_VALUE': target_name}, inplace=True)
-        data_dict[target_name] = target_data[['TIME_PERIOD', target_name]]
+        for f in os.listdir(target_dir):
+            if f.endswith('.csv'):
+                var_name = f.replace('.csv', '')
+                df = pd.read_csv(os.path.join(target_dir, f), usecols=['geo', 'TIME_PERIOD', 'OBS_VALUE'])
+                df = df[df['geo'] == country]
+                df.rename(columns={'OBS_VALUE': var_name}, inplace=True)
+                df['TIME_PERIOD'] = pd.to_datetime(df['TIME_PERIOD'], format='%Y', errors='coerce')
+                df.dropna(subset=['TIME_PERIOD'], inplace=True)
+                data_dict[var_name] = df[['TIME_PERIOD', var_name]]
 
-        # Merge all dataframes
-        merged_data = data_dict[list(data_dict.keys())[0]]
-        for var in list(data_dict.keys())[1:]:
-            merged_data = merged_data.merge(data_dict[var], on='TIME_PERIOD', how='outer')
+        # Merge all variables
+        merged = None
+        for df in data_dict.values():
+            merged = df if merged is None else pd.merge(merged, df, on='TIME_PERIOD', how='outer')
 
-        # Process datetime, filter, interpolate, drop NaNs
-        merged_data['TIME_PERIOD'] = pd.to_datetime(merged_data['TIME_PERIOD'], format='%Y')
-        merged_data.set_index('TIME_PERIOD', inplace=True)
-        merged_data = merged_data[merged_data.index.year <= 2018]
-        merged_data = merged_data.interpolate(method='linear').dropna()
+        if merged is not None:
+            merged.sort_values('TIME_PERIOD', inplace=True)
+            merged.set_index('TIME_PERIOD', inplace=True)
+            merged = merged.interpolate(method='linear')  # fill missing
+            country_data_dict[country] = merged
 
-        all_data[country] = merged_data
-
-    return all_data
+    return country_data_dict
