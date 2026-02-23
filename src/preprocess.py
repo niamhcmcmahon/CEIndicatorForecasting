@@ -1,16 +1,27 @@
 import pandas as pd
 from statsmodels.tsa.stattools import adfuller
-import os
 
 def check_stationarity(series):
-    result = adfuller(series.dropna())
-    return result[1] < 0.05  # p < 0.05 → stationary
+    series = series.dropna()
+    if series.nunique() <= 1:
+        return None
+    result = adfuller(series)
+    return result[1] < 0.05  # True = stationary
 
-def difference_series(series):
-    return series.diff().dropna()
-
-def train_test_split(df, split_ratio=0.8):
-    n = int(len(df) * split_ratio)
-    train = df.iloc[:n]
-    test = df.iloc[n:]
+def split_train_test(df, train_ratio=0.8):
+    n = len(df)
+    train = df.iloc[:int(n*train_ratio)]
+    test = df.iloc[int(n*train_ratio):]
     return train, test
+
+def difference_nonstationary(df):
+    diff_df = pd.DataFrame(index=df.index[1:])
+    for col in df.columns:
+        is_stat = check_stationarity(df[col])
+        if is_stat is None:
+            continue
+        elif not is_stat:
+            diff_df[col] = df[col].diff().dropna()
+        else:
+            diff_df[col] = df[col][1:]
+    return diff_df
