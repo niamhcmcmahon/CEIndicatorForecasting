@@ -1,7 +1,4 @@
 import pandas as pd
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-
 from src.config import RAW_DATA_DIR
 from src.rolling_origin import rolling_origin_forecast
 from src.metrics import rmse, mae, mape
