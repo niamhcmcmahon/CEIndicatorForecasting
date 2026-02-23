@@ -1,124 +1,54 @@
-from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.linear_model import Ridge
-from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
-from sklearn.metrics import mean_absolute_percentage_error as mape
-import numpy as np
 import pandas as pd
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
+from src.load_data import load_country_data
+from src.preprocess import split_train_test, difference_nonstationary
+from src.feature_selection import mutual_info_ranking
+from src.evaluation import compute_metrics
+import src.config as cfg
 
+# Settings from config.py
+COUNTRIES = cfg.COUNTRIES
+TARGET_COL = 'resourceproductivity'  
+DEGREE = cfg.POLY_DEGREES[1] 
+ALPHA = cfg.RIDGE_ALPHAS[1]   
+OUTPUT_PATH = f"{cfg.FORECASTS_DIR}/poly_ridge/"
 
-def rolling_origin_poly_ridge(
-    train_df, 
-    test_df, 
-    feature_cols, 
-    target_col, 
-    poly_degrees=[1,2], 
-    alphas=[0.5,1,10], 
-    n_boot=1000
-):
-    """
-    Perform rolling-origin forecast using Polynomial Ridge regression with bootstrap uncertainty.
-    Returns the best forecast DataFrame and metrics.
-    """
-    scaler = StandardScaler()
-    train_df_scaled = train_df.copy()
-    test_df_scaled = test_df.copy()
+for country in COUNTRIES:
+    print(f'Processing {country}')
+    data = load_country_data(TARGET_COL, [country])[country]
 
-    train_df_scaled[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-    test_df_scaled[feature_cols] = scaler.transform(test_df[feature_cols])
+    # Preprocess
+    train, test = split_train_test(data, split_ratio=cfg.TRAIN_TEST_SPLIT_RATIO)
+    diff_train = difference_nonstationary(train)
+    diff_test = test[diff_train.columns]
 
-    best_test_rmse = np.inf
-    best_forecast_df = None
-    best_params = None
-    best_train_fitted = None
-    best_train_true = None
+    X_train = diff_train.drop(columns=[TARGET_COL])
+    y_train = diff_train[TARGET_COL]
+    X_test = diff_test.drop(columns=[TARGET_COL])
+    y_test = diff_test[TARGET_COL]
 
-    from itertools import product
-    for degree, alpha in product(poly_degrees, alphas):
-        # Prepare polynomial transformer
-        poly = PolynomialFeatures(degree=degree, include_bias=False)
-        
-        # Initial training residuals for first bootstrap
-        poly_train_full = poly.fit_transform(train_df_scaled[feature_cols].values)
-        y_train_full = train_df_scaled[target_col].values
-        model_full = Ridge(alpha=alpha, max_iter=10000, random_state=42)
-        model_full.fit(poly_train_full, y_train_full)
-        train_residuals = y_train_full - model_full.predict(poly_train_full)
-        train_resid_std = np.std(train_residuals)
+    # Feature selection
+    mi_scores = mutual_info_ranking(X_train, y_train, threshold=cfg.MUTUAL_INFO_THRESHOLD)
+    top_features = mi_scores.head(10).index.tolist()
+    X_train = X_train[top_features]
+    X_test = X_test[top_features]
 
-        # Rolling-origin
-        train_window = train_df_scaled.copy()
-        predictions, true_values, residuals = [], [], []
-        train_fitted_preds, train_true = [], []
+    # Pipeline
+    pipeline = Pipeline([
+        ('poly', PolynomialFeatures(degree=DEGREE, include_bias=False)),
+        ('scaler', StandardScaler()),
+        ('ridge', Ridge(alpha=ALPHA))
+    ])
 
-        for i in range(len(test_df_scaled)):
-            X_train = poly.fit_transform(train_window[feature_cols].values)
-            y_train = train_window[target_col].values
-
-            X_test = poly.transform(test_df_scaled[feature_cols].iloc[i:i+1].values)
-            y_test = test_df_scaled[target_col].iloc[i]
-
-            model = Ridge(alpha=alpha, max_iter=10000, random_state=42)
-            model.fit(X_train, y_train)
-
-            fitted_train = model.predict(X_train)
-            train_fitted_preds.extend(fitted_train)
-            train_true.extend(y_train)
-
-            y_pred = model.predict(X_test)[0]
-            predictions.append(y_pred)
-            true_values.append(y_test)
-
-            if i == 0:
-                resid_std = train_resid_std
-            else:
-                resid_std = np.std(residuals)
-
-            y_boot = y_pred + np.random.normal(0, resid_std, size=n_boot)
-            if i == 0:
-                bootstrap_array = y_boot[None,:]
-            else:
-                bootstrap_array = np.vstack([bootstrap_array, y_boot])
-
-            residuals.append(y_test - y_pred)
-            train_window = pd.concat([train_window, test_df_scaled.iloc[i:i+1]])
-
-        test_rmse = np.sqrt(mean_squared_error(true_values, predictions))
-        if test_rmse < best_test_rmse:
-            best_test_rmse = test_rmse
-            best_params = {'poly_degree': degree, 'alpha': alpha}
-            best_forecast_df = pd.DataFrame({
-                'True': true_values,
-                'Predicted': predictions,
-                'Mean_Bootstrap': bootstrap_array.mean(axis=1),
-                'Lower95_CI': np.percentile(bootstrap_array, 2.5, axis=1),
-                'Upper95_CI': np.percentile(bootstrap_array, 97.5, axis=1)
-            }, index=test_df_scaled.index)
-            best_train_fitted = np.array(train_fitted_preds)
-            best_train_true = np.array(train_true)
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
 
     # Metrics
-    def mape(y_true, y_pred):
-    y_true, y_pred = np.array(y_true), np.array(y_pred)
-    non_zero_mask = y_true != 0
-    return np.mean(
-        np.abs((y_true[non_zero_mask] - y_pred[non_zero_mask]) / y_true[non_zero_mask])
-    ) * 100
+    rmse, mae, mape_val = compute_metrics(y_test, y_pred)
+    print(f'{country} - RMSE: {rmse:.3f}, MAE: {mae:.3f}, MAPE: {mape_val:.2f}%')
 
-
-    train_rmse = np.sqrt(mean_squared_error(best_train_true, best_train_fitted))
-    train_mae = mean_absolute_error(best_train_true, best_train_fitted)
-    train_mape = mape(best_train_true, best_train_fitted)
-    test_mae = mean_absolute_error(best_forecast_df['True'], best_forecast_df['Predicted'])
-    test_mape = mape(best_forecast_df['True'], best_forecast_df['Predicted'])
-
-    metrics = {
-        'best_params': best_params,
-        'train_rmse': train_rmse,
-        'train_mae': train_mae,
-        'train_mape': train_mape,
-        'test_rmse': best_test_rmse,
-        'test_mae': test_mae,
-        'test_mape': test_mape
-    }
-
-    return best_forecast_df, metrics
+    # Save forecasts
+    forecast_df = pd.DataFrame({'y_true': y_test, 'y_pred': y_pred}, index=X_test.index)
+    forecast_df.to_csv(f'{OUTPUT_PATH}{country}_poly_ridge.csv', index=True)
