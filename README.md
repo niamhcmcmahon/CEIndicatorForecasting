@@ -1,6 +1,6 @@
 # CEIndicatorForecasting
 
-Forecasting framework for EU circular economy indicators.
+Forecasting framework for EU circular economy indicators. Data included in this repository is sourced from the Eurostat database: https://ec.europa.eu/eurostat/web/main/data/database 
 
 ## Local setup
 
@@ -77,4 +77,5 @@ Forecast CSVs are written under:
 
 
 #
+
 
